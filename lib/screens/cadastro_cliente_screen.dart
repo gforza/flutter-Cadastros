@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
-import 'home_screen.dart';
+import '../controllers/app_controller.dart';
 
 class CadastroClienteScreen extends StatefulWidget {
   const CadastroClienteScreen({super.key});
@@ -16,13 +15,13 @@ class _CadastroClienteScreenState extends State<CadastroClienteScreen> {
   final _cpfCnpjController = TextEditingController();
   final _emailController = TextEditingController();
   final _telefoneController = TextEditingController();
-  final _cepController = TextEditingController();
   final _enderecoController = TextEditingController();
   final _bairroController = TextEditingController();
   final _cidadeController = TextEditingController();
-  final _ufController = TextEditingController();
-  String _tipoSelecionado = 'F';
+  final _appController = AppController();
   List<Cliente> _clientes = [];
+  String _tipoSelecionado = 'PF';
+  Cliente? _clienteEmEdicao;
 
   @override
   void initState() {
@@ -31,7 +30,7 @@ class _CadastroClienteScreenState extends State<CadastroClienteScreen> {
   }
 
   Future<void> _carregarClientes() async {
-    final clientes = await ClienteController.getClientes();
+    final clientes = await _appController.getClientes();
     setState(() {
       _clientes = clientes;
     });
@@ -39,367 +38,262 @@ class _CadastroClienteScreenState extends State<CadastroClienteScreen> {
 
   Future<void> _salvarCliente() async {
     if (_formKey.currentState!.validate()) {
-      final novoId = _clientes.isEmpty ? 1 : _clientes.last.id + 1;
-      final cliente = Cliente(
-        id: novoId,
-        nome: _nomeController.text,
-        tipo: _tipoSelecionado,
-        cpfCnpj: _cpfCnpjController.text,
-        email: _emailController.text.isEmpty ? null : _emailController.text,
-        telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
-        cep: _cepController.text.isEmpty ? null : _cepController.text,
-        endereco: _enderecoController.text.isEmpty ? null : _enderecoController.text,
-        bairro: _bairroController.text.isEmpty ? null : _bairroController.text,
-        cidade: _cidadeController.text.isEmpty ? null : _cidadeController.text,
-        uf: _ufController.text.isEmpty ? null : _ufController.text,
-      );
+      if (_clienteEmEdicao != null) {
+        // Atualizar cliente existente
+        final clienteAtualizado = Cliente(
+          id: _clienteEmEdicao!.id,
+          nome: _nomeController.text,
+          cpfCnpj: _cpfCnpjController.text,
+          email: _emailController.text,
+          telefone: _telefoneController.text,
+          endereco: _enderecoController.text,
+          bairro: _bairroController.text,
+          cidade: _cidadeController.text,
+          tipo: _tipoSelecionado,
+        );
 
-      await ClienteController.addCliente(cliente);
+        await _appController.updateCliente(clienteAtualizado);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cliente atualizado com sucesso'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Criar novo cliente
+        final novoCliente = Cliente(
+          id: _clientes.isEmpty ? 1 : _clientes.last.id + 1,
+          nome: _nomeController.text,
+          cpfCnpj: _cpfCnpjController.text,
+          email: _emailController.text,
+          telefone: _telefoneController.text,
+          endereco: _enderecoController.text,
+          bairro: _bairroController.text,
+          cidade: _cidadeController.text,
+          tipo: _tipoSelecionado,
+        );
+
+        await _appController.addCliente(novoCliente);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cliente cadastrado com sucesso'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
       await _carregarClientes();
-
       _limparCampos();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cliente cadastrado com sucesso')),
-      );
     }
   }
 
-  void _limparCampos() {
-    _nomeController.clear();
-    _cpfCnpjController.clear();
-    _emailController.clear();
-    _telefoneController.clear();
-    _cepController.clear();
-    _enderecoController.clear();
-    _bairroController.clear();
-    _cidadeController.clear();
-    _ufController.clear();
+  Future<void> _excluirCliente(int id) async {
+    await _appController.deleteCliente(id);
+    await _carregarClientes();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cliente excluído com sucesso'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  void _editarCliente(Cliente cliente) {
     setState(() {
-      _tipoSelecionado = 'F';
+      _clienteEmEdicao = cliente;
+      _nomeController.text = cliente.nome;
+      _cpfCnpjController.text = cliente.cpfCnpj;
+      _emailController.text = cliente.email ?? '';
+      _telefoneController.text = cliente.telefone ?? '';
+      _enderecoController.text = cliente.endereco ?? '';
+      _bairroController.text = cliente.bairro ?? '';
+      _cidadeController.text = cliente.cidade ?? '';
+      _tipoSelecionado = cliente.tipo;
     });
   }
 
-  Future<void> _excluirCliente(int id) async {
-    await ClienteController.deleteCliente(id);
-    await _carregarClientes();
-  }
-
-  Future<void> _editarCliente(Cliente cliente) async {
-    _nomeController.text = cliente.nome;
-    _tipoSelecionado = cliente.tipo;
-    _cpfCnpjController.text = cliente.cpfCnpj;
-    _emailController.text = cliente.email ?? '';
-    _telefoneController.text = cliente.telefone ?? '';
-    _cepController.text = cliente.cep ?? '';
-    _enderecoController.text = cliente.endereco ?? '';
-    _bairroController.text = cliente.bairro ?? '';
-    _cidadeController.text = cliente.cidade ?? '';
-    _ufController.text = cliente.uf ?? '';
-
+  void _visualizarCliente(Cliente cliente) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Editar Cliente'),
+        title: const Text('Detalhes do Cliente'),
         content: SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextFormField(
-                controller: _nomeController,
-                decoration: const InputDecoration(
-                  labelText: 'Nome *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira o nome';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _tipoSelecionado,
-                decoration: const InputDecoration(
-                  labelText: 'Tipo *',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'F', child: Text('Pessoa Física')),
-                  DropdownMenuItem(value: 'J', child: Text('Pessoa Jurídica')),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _tipoSelecionado = value!;
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _cpfCnpjController,
-                decoration: InputDecoration(
-                  labelText: _tipoSelecionado == 'F' ? 'CPF *' : 'CNPJ *',
-                  border: const OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Por favor, insira o ${_tipoSelecionado == 'F' ? 'CPF' : 'CNPJ'}';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'E-mail',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _telefoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Telefone',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _cepController,
-                decoration: const InputDecoration(
-                  labelText: 'CEP',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _enderecoController,
-                decoration: const InputDecoration(
-                  labelText: 'Endereço',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _bairroController,
-                decoration: const InputDecoration(
-                  labelText: 'Bairro',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _cidadeController,
-                decoration: const InputDecoration(
-                  labelText: 'Cidade',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _ufController,
-                decoration: const InputDecoration(
-                  labelText: 'UF',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              Text('Nome: ${cliente.nome}'),
+              const SizedBox(height: 8),
+              Text('Tipo: ${cliente.tipo == 'PF' ? 'Pessoa Física' : 'Pessoa Jurídica'}'),
+              const SizedBox(height: 8),
+              Text('${cliente.tipo == 'PF' ? 'CPF' : 'CNPJ'}: ${cliente.cpfCnpj}'),
+              const SizedBox(height: 8),
+              Text('E-mail: ${cliente.email ?? ''}'),
+              const SizedBox(height: 8),
+              Text('Telefone: ${cliente.telefone ?? ''}'),
+              const SizedBox(height: 8),
+              Text('Endereço: ${cliente.endereco ?? ''}'),
+              const SizedBox(height: 8),
+              Text('Bairro: ${cliente.bairro ?? ''}'),
+              const SizedBox(height: 8),
+              Text('Cidade: ${cliente.cidade ?? ''}'),
             ],
           ),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _limparCampos();
-            },
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (_formKey.currentState!.validate()) {
-                final clienteAtualizado = Cliente(
-                  id: cliente.id,
-                  nome: _nomeController.text,
-                  tipo: _tipoSelecionado,
-                  cpfCnpj: _cpfCnpjController.text,
-                  email: _emailController.text.isEmpty ? null : _emailController.text,
-                  telefone: _telefoneController.text.isEmpty ? null : _telefoneController.text,
-                  cep: _cepController.text.isEmpty ? null : _cepController.text,
-                  endereco: _enderecoController.text.isEmpty ? null : _enderecoController.text,
-                  bairro: _bairroController.text.isEmpty ? null : _bairroController.text,
-                  cidade: _cidadeController.text.isEmpty ? null : _cidadeController.text,
-                  uf: _ufController.text.isEmpty ? null : _ufController.text,
-                );
-
-                await ClienteController.updateCliente(clienteAtualizado);
-                await _carregarClientes();
-                _limparCampos();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Cliente atualizado com sucesso')),
-                );
-              }
-            },
-            child: const Text('Salvar'),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
           ),
         ],
       ),
     );
   }
 
+  void _limparCampos() {
+    setState(() {
+      _clienteEmEdicao = null;
+      _nomeController.clear();
+      _cpfCnpjController.clear();
+      _emailController.clear();
+      _telefoneController.clear();
+      _enderecoController.clear();
+      _bairroController.clear();
+      _cidadeController.clear();
+      _tipoSelecionado = 'PF';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cadastro de Clientes'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
+        title: Text(_clienteEmEdicao == null ? 'Cadastro de Clientes' : 'Editar Cliente'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  TextFormField(
+                    controller: _nomeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nome*',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Por favor, insira o nome';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<String>(
+                    value: _tipoSelecionado,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo*',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'PF', child: Text('Pessoa Física')),
+                      DropdownMenuItem(value: 'PJ', child: Text('Pessoa Jurídica')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _tipoSelecionado = value;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _cpfCnpjController,
+                    decoration: InputDecoration(
+                      labelText: _tipoSelecionado == 'PF' ? 'CPF*' : 'CNPJ*',
+                      border: const OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Por favor, insira o ${_tipoSelecionado == 'PF' ? 'CPF' : 'CNPJ'}';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: const InputDecoration(
+                      labelText: 'E-mail',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _telefoneController,
+                    decoration: const InputDecoration(
+                      labelText: 'Telefone',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _enderecoController,
+                    decoration: const InputDecoration(
+                      labelText: 'Endereço',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _bairroController,
+                    decoration: const InputDecoration(
+                      labelText: 'Bairro',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _cidadeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Cidade',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      TextFormField(
-                        controller: _nomeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nome *',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Por favor, insira o nome';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: _tipoSelecionado,
-                        decoration: const InputDecoration(
-                          labelText: 'Tipo *',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'F', child: Text('Pessoa Física')),
-                          DropdownMenuItem(value: 'J', child: Text('Pessoa Jurídica')),
-                        ],
-                        onChanged: (value) {
-                          setState(() {
-                            _tipoSelecionado = value!;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _cpfCnpjController,
-                        decoration: InputDecoration(
-                          labelText: _tipoSelecionado == 'F' ? 'CPF *' : 'CNPJ *',
-                          border: const OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Por favor, insira o ${_tipoSelecionado == 'F' ? 'CPF' : 'CNPJ'}';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailController,
-                        decoration: const InputDecoration(
-                          labelText: 'E-mail',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _telefoneController,
-                        decoration: const InputDecoration(
-                          labelText: 'Telefone',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _cepController,
-                        decoration: const InputDecoration(
-                          labelText: 'CEP',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _enderecoController,
-                        decoration: const InputDecoration(
-                          labelText: 'Endereço',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _bairroController,
-                        decoration: const InputDecoration(
-                          labelText: 'Bairro',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _cidadeController,
-                        decoration: const InputDecoration(
-                          labelText: 'Cidade',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _ufController,
-                        decoration: const InputDecoration(
-                          labelText: 'UF',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: _salvarCliente,
-                        child: const Text('Salvar'),
+                        child: Text(_clienteEmEdicao == null ? 'Salvar' : 'Atualizar'),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (context) => const HomeScreen()),
-                            (route) => false,
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey,
+                      if (_clienteEmEdicao != null)
+                        ElevatedButton(
+                          onPressed: _limparCampos,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
+                          child: const Text('Cancelar'),
                         ),
-                        child: const Text('Voltar para Home'),
-                      ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
             const Text(
               'Clientes Cadastrados',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            const SizedBox(height: 8),
             Expanded(
               child: ListView.builder(
                 itemCount: _clientes.length,
@@ -407,10 +301,14 @@ class _CadastroClienteScreenState extends State<CadastroClienteScreen> {
                   final cliente = _clientes[index];
                   return ListTile(
                     title: Text(cliente.nome),
-                    subtitle: Text(cliente.tipo == 'F' ? 'Pessoa Física' : 'Pessoa Jurídica'),
+                    subtitle: Text('${cliente.tipo == 'PF' ? 'CPF' : 'CNPJ'}: ${cliente.cpfCnpj}'),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.visibility),
+                          onPressed: () => _visualizarCliente(cliente),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit),
                           onPressed: () => _editarCliente(cliente),
@@ -437,11 +335,9 @@ class _CadastroClienteScreenState extends State<CadastroClienteScreen> {
     _cpfCnpjController.dispose();
     _emailController.dispose();
     _telefoneController.dispose();
-    _cepController.dispose();
     _enderecoController.dispose();
     _bairroController.dispose();
     _cidadeController.dispose();
-    _ufController.dispose();
     super.dispose();
   }
 } 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'screens/cadastro_usuario_screen.dart';
 import 'screens/home_screen.dart';
-import 'controllers/usuario_controller.dart';
+import 'controllers/app_controller.dart';
 import 'utils/storage.dart';
 
 void main() async {
@@ -37,6 +37,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
+  String? _errorMessage;
+  final _appController = AppController();
 
   @override
   Widget build(BuildContext context) {
@@ -80,12 +82,29 @@ class _LoginScreenState extends State<LoginScreen> {
                   return null;
                 },
               ),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      color: Colors.red,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
-                    if (_usernameController.text == 'admin' && 
-                        _passwordController.text == 'admin') {
+                    setState(() {
+                      _errorMessage = null;
+                    });
+                    
+                    if (await _appController.validarCredenciais(
+                      _usernameController.text,
+                      _passwordController.text,
+                    )) {
                       Navigator.pushReplacement(
                         context,
                         MaterialPageRoute(
@@ -93,24 +112,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       );
                     } else {
-                      final usuario = await UsuarioController.login(
-                        _usernameController.text,
-                        _passwordController.text,
-                      );
-                      if (usuario != null) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const HomeScreen(),
-                          ),
-                        );
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Usuário ou senha inválidos'),
-                          ),
-                        );
-                      }
+                      setState(() {
+                        _errorMessage = 'Login inválido';
+                      });
                     }
                   }
                 },

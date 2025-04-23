@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../controllers/usuario_controller.dart';
 import '../models/usuario.dart';
-import 'home_screen.dart';
+import '../controllers/app_controller.dart';
 
 class CadastroUsuarioScreen extends StatefulWidget {
   const CadastroUsuarioScreen({super.key});
@@ -15,7 +14,9 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
   final _nomeController = TextEditingController();
   final _senhaController = TextEditingController();
   final _confirmarSenhaController = TextEditingController();
+  final _appController = AppController();
   List<Usuario> _usuarios = [];
+  Usuario? _usuarioEmEdicao;
 
   @override
   void initState() {
@@ -24,7 +25,7 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
   }
 
   Future<void> _carregarUsuarios() async {
-    final usuarios = await UsuarioController.getUsuarios();
+    final usuarios = await _appController.getUsuarios();
     setState(() {
       _usuarios = usuarios;
     });
@@ -34,130 +35,91 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
     if (_formKey.currentState!.validate()) {
       if (_senhaController.text != _confirmarSenhaController.text) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('As senhas não coincidem')),
+          const SnackBar(
+            content: Text('As senhas não coincidem'),
+            backgroundColor: Colors.red,
+          ),
         );
         return;
       }
 
-      final novoId = _usuarios.isEmpty ? 1 : _usuarios.last.id + 1;
-      final usuario = Usuario(
-        id: novoId,
-        nome: _nomeController.text,
-        senha: _senhaController.text,
-      );
+      if (_usuarioEmEdicao != null) {
+        // Atualizar usuário existente
+        final usuarioAtualizado = Usuario(
+          id: _usuarioEmEdicao!.id,
+          nome: _nomeController.text,
+          senha: _senhaController.text,
+        );
 
-      await UsuarioController.addUsuario(usuario);
+        await _appController.updateUsuario(usuarioAtualizado);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Usuário atualizado com sucesso'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Criar novo usuário
+        final novoUsuario = Usuario(
+          id: _usuarios.isEmpty ? 1 : _usuarios.last.id + 1,
+          nome: _nomeController.text,
+          senha: _senhaController.text,
+        );
+
+        await _appController.addUsuario(novoUsuario);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Usuário cadastrado com sucesso'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+
       await _carregarUsuarios();
-
-      _nomeController.clear();
-      _senhaController.clear();
-      _confirmarSenhaController.clear();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Usuário cadastrado com sucesso')),
-      );
+      _limparCampos();
     }
   }
 
   Future<void> _excluirUsuario(int id) async {
-    await UsuarioController.deleteUsuario(id);
+    await _appController.deleteUsuario(id);
     await _carregarUsuarios();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Usuário excluído com sucesso'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
-  Future<void> _editarUsuario(Usuario usuario) async {
-    _nomeController.text = usuario.nome;
-    _senhaController.text = usuario.senha;
-    _confirmarSenhaController.text = usuario.senha;
+  void _editarUsuario(Usuario usuario) {
+    setState(() {
+      _usuarioEmEdicao = usuario;
+      _nomeController.text = usuario.nome;
+      _senhaController.text = usuario.senha;
+      _confirmarSenhaController.text = usuario.senha;
+    });
+  }
 
+  void _visualizarUsuario(Usuario usuario) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Editar Usuário'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _nomeController,
-              decoration: const InputDecoration(
-                labelText: 'Nome',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, insira o nome';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _senhaController,
-              decoration: const InputDecoration(
-                labelText: 'Senha',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, insira a senha';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _confirmarSenhaController,
-              decoration: const InputDecoration(
-                labelText: 'Confirmar Senha',
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Por favor, confirme a senha';
-                }
-                if (value != _senhaController.text) {
-                  return 'As senhas não coincidem';
-                }
-                return null;
-              },
-            ),
-          ],
+        title: const Text('Detalhes do Usuário'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Nome: ${usuario.nome}'),
+              const SizedBox(height: 8),
+              Text('ID: ${usuario.id}'),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _limparCampos();
-            },
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (_formKey.currentState!.validate()) {
-                if (_senhaController.text != _confirmarSenhaController.text) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('As senhas não coincidem')),
-                  );
-                  return;
-                }
-
-                final usuarioAtualizado = Usuario(
-                  id: usuario.id,
-                  nome: _nomeController.text,
-                  senha: _senhaController.text,
-                );
-
-                await UsuarioController.updateUsuario(usuarioAtualizado);
-                await _carregarUsuarios();
-                _limparCampos();
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Usuário atualizado com sucesso')),
-                );
-              }
-            },
-            child: const Text('Salvar'),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Fechar'),
           ),
         ],
       ),
@@ -165,22 +127,20 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
   }
 
   void _limparCampos() {
-    _nomeController.clear();
-    _senhaController.clear();
-    _confirmarSenhaController.clear();
+    setState(() {
+      _usuarioEmEdicao = null;
+      _nomeController.clear();
+      _senhaController.clear();
+      _confirmarSenhaController.clear();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cadastro de Usuários'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
+        title: Text(_usuarioEmEdicao == null ? 'Cadastro de Usuários' : 'Editar Usuário'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -193,7 +153,7 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
                   TextFormField(
                     controller: _nomeController,
                     decoration: const InputDecoration(
-                      labelText: 'Nome',
+                      labelText: 'Nome *',
                       border: OutlineInputBorder(),
                     ),
                     validator: (value) {
@@ -207,7 +167,7 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
                   TextFormField(
                     controller: _senhaController,
                     decoration: const InputDecoration(
-                      labelText: 'Senha',
+                      labelText: 'Senha *',
                       border: OutlineInputBorder(),
                     ),
                     obscureText: true,
@@ -222,7 +182,7 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
                   TextFormField(
                     controller: _confirmarSenhaController,
                     decoration: const InputDecoration(
-                      labelText: 'Confirmar Senha',
+                      labelText: 'Confirmar Senha *',
                       border: OutlineInputBorder(),
                     ),
                     obscureText: true,
@@ -230,38 +190,37 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Por favor, confirme a senha';
                       }
-                      if (value != _senhaController.text) {
-                        return 'As senhas não coincidem';
-                      }
                       return null;
                     },
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _salvarUsuario,
-                    child: const Text('Salvar'),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (context) => const HomeScreen()),
-                        (route) => false,
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey,
-                    ),
-                    child: const Text('Voltar para Home'),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                        onPressed: _salvarUsuario,
+                        child: Text(_usuarioEmEdicao == null ? 'Salvar' : 'Atualizar'),
+                      ),
+                      if (_usuarioEmEdicao != null)
+                        ElevatedButton(
+                          onPressed: _limparCampos,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey,
+                          ),
+                          child: const Text('Cancelar'),
+                        ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             const Text(
               'Usuários Cadastrados',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             Expanded(
               child: ListView.builder(
@@ -273,6 +232,10 @@ class _CadastroUsuarioScreenState extends State<CadastroUsuarioScreen> {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        IconButton(
+                          icon: const Icon(Icons.visibility),
+                          onPressed: () => _visualizarUsuario(usuario),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.edit),
                           onPressed: () => _editarUsuario(usuario),
